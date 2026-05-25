@@ -35,7 +35,7 @@
     overflow: hidden;
     height: 100vh;
     width: 100vw;
-    cursor: none;
+    cursor: default;
   }
 
   /* CRT scanline overlay */
@@ -946,11 +946,60 @@ let anomalyStarted = false;
 let resolveStarted = false;
 let anomalyPhaseTime = 0;
 
+// Ray-casting point-in-polygon test for land detection
+function pointInPoly(lat, lon, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const yi = poly[i][0], xi = poly[i][1];
+    const yj = poly[j][0], xj = poly[j][1];
+    if (((yi > lat) !== (yj > lat)) &&
+        (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi)) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function isOnLand(lat, lon) {
+  for (const poly of usPolygons) {
+    if (pointInPoly(lat, lon, poly)) return true;
+  }
+  for (const poly of canadaPolygons) {
+    if (pointInPoly(lat, lon, poly)) return true;
+  }
+  for (const poly of mexicoPolygons) {
+    if (pointInPoly(lat, lon, poly)) return true;
+  }
+  return false;
+}
+
 function spawnAnomalyDot() {
   const primary = stations[0];
+  const maxRadius = Math.min(1, anomalyPhaseTime / 20);
+
+  // Try up to 10 times to find a land point
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const angle = Math.random() * Math.PI * 2;
+    // Higher exponent = more concentrated at center
+    const dist = Math.pow(Math.random(), 1.8) * maxRadius;
+    const lat = primary.lat + Math.sin(angle) * dist * 18;
+    const lon = primary.lon + Math.cos(angle) * dist * 25;
+
+    if (isOnLand(lat, lon)) {
+      anomalyDots.push({
+        lat, lon,
+        born: Date.now(),
+        phase: Math.random() * Math.PI * 2
+      });
+      return;
+    }
+  }
+  // Fallback: place near center (always on land)
+  const angle = Math.random() * Math.PI * 2;
+  const dist = Math.pow(Math.random(), 2.5) * maxRadius * 0.3;
   anomalyDots.push({
-    lat: primary.lat + (Math.random() - 0.5) * 12,
-    lon: primary.lon + (Math.random() - 0.5) * 18,
+    lat: primary.lat + Math.sin(angle) * dist * 18,
+    lon: primary.lon + Math.cos(angle) * dist * 25,
     born: Date.now(),
     phase: Math.random() * Math.PI * 2
   });
